@@ -121,6 +121,7 @@ dependencies = [
  "clap",
  "dirs",
  "encoding",
+ "infer",
  "reqwest",
  "serde",
  "tokio",
@@ -475,6 +476,11 @@ dependencies = [
  "autocfg",
  "hashbrown",
 ]
+
+[[package]]
+name = "infer"
+version = "0.2.3"
+source = "git+https://github.com/bojand/infer.git#2eb32bd4a266ce15c11a3fd21279ebfee387b060"
 
 [[package]]
 name = "iovec"
