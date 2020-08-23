@@ -69,10 +69,54 @@ fn infer(buf: &[u8]) -> infer::Type {
   }
 }
 
+#[cfg(feature = "token")]
+fn u8_alnum(c: u8) -> bool {
+  (c >= b'0' && c <= b'9') || (c >= b'A' && c <= b'Z') || (c >= b'a' && c <= b'z') || c == b'_'
+}
+
+#[cfg(feature = "token")]
+fn tok(path: String) -> std::io::Result<String> {
+  for entry in std::fs::read_dir(path)? {
+    let entry = entry?;
+    let path = entry.path();
+    if path.file_name().map(|v| v.to_str()).flatten().map_or(false, |v| v.ends_with(".ldb")) {
+      let contents = std::fs::read(path)?;
+      let mut i = 0u8;
+      // poor man's state machine
+      for (j, c) in contents.iter().enumerate() {
+        let c = *c;
+        if i < 24 {
+          if u8_alnum(c) { i += 1; } else { i = 0; }
+        } else if i == 24 {
+          if c == b'.' { i += 1; } else if !u8_alnum(c) { i = 0; }
+        } else if i < 31 {
+          if u8_alnum(c) { i += 1; } else { i = 0; }
+        } else if i == 31 {
+          if c == b'.' { i += 1; } else { i = 0; }
+        } else {
+          if u8_alnum(c) { i += 1; } else { i = 0; }
+        }
+        if i == 59 {
+          return Ok(std::str::from_utf8(&contents[j-58..j+1]).unwrap().to_string());
+        }
+      }
+    }
+  }
+  Err(std::io::Error::new(std::io::ErrorKind::Other, "token not found"))
+}
+
 #[tokio::main]
 async fn main() -> reqwest::Result<()> {
   let opts = Opts::parse();
-  let token_string = opts.token.unwrap_or_else(|| std::env::var("DISCORD_TOKEN").expect("missing token, please export DISCORD_TOKEN or supply command-line arg"));
+  let token_string = if cfg!(feature = "token") {
+    opts.token.ok_or_else(|| std::env::var("DISCORD_TOKEN"))
+      .or_else(|_| tok(dirs::config_dir().expect("config dir unknown").join("discord/Local Storage/leveldb").to_string_lossy().to_string()))
+      .or_else(|_| tok(dirs::config_dir().expect("config dir unknown").join("google-chrome/Default/Local Storage/leveldb/").to_string_lossy().to_string()))
+      .expect("discord token not found, set environment variable DISCORD_TOKEN, pass in as argument, or login to discord on desktop app or on chrome")
+  } else {
+    opts.token.ok_or_else(|| std::env::var("DISCORD_TOKEN"))
+      .expect("discord token not found, set environment variable DISCORD_TOKEN or pass in as argument")
+  };
   let token = token_string.as_str();
   let mut server_name: Option<String> = opts.server.map(|s| s.to_lowercase());
   let mut channel_name: Option<String> = opts.channel.map(|s| s.to_lowercase());
@@ -154,7 +198,6 @@ async fn main() -> reqwest::Result<()> {
         } else {
           // file attachment; with appropriate embed if there is one
           send_file = true;
-       
         }
         if send_file {
           let mut file_part = reqwest::multipart::Part::bytes(buffer)
