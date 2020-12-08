@@ -9,11 +9,11 @@ serde = { version = "1.0.115", features = ["derive"] }
 reqwest = { version = "0.10", features = ["json"] }
 tokio = { version = "0.2", features = ["macros"] }
 clap = "3.0.0-beta.1"
+dirs = { version = "3.0.1" }
 infer = { version = "0.3.2", optional = true }
-dirs = { version = "3.0.1", optional = true }
 
 [features]
 default = ["filetype", "token"]
 filetype = ["infer"]
-token = ["dirs"]
+token = []
 

@@ -141,7 +141,7 @@ async fn main() -> reqwest::Result<()> {
   let token = token_string.as_str();
   let mut server_name: Option<String> = opts.server.map(|s| s.to_lowercase());
   let mut channel_name: Option<String> = opts.channel.map(|s| s.to_lowercase());
-  if let Ok(contents) = std::fs::read_to_string("config") {
+  if let Ok(contents) = std::fs::read_to_string(dirs::config_dir().expect("config dir unknown").join("cliscord/config").to_string_lossy().to_string()) {
     let parts: Vec<&str> = contents.split('\n').collect();
     if parts[0].len() > 0 {
       server_name = server_name.or(Some(parts[0].to_string().to_lowercase()));
@@ -255,7 +255,8 @@ async fn main() -> reqwest::Result<()> {
       }
     }
   }
-  if let Ok(_) = std::fs::write("config", format!("{}\n{}", server_name, channel_name)) {
+  if let Ok(_) = std::fs::create_dir_all(dirs::config_dir().expect("config dir unknown").join("cliscord").to_string_lossy().to_string()) {
+    if let Ok(_) = std::fs::write(dirs::config_dir().expect("config dir unknown").join("cliscord/config").to_string_lossy().to_string(), format!("{}\n{}", server_name, channel_name)) {}
   }
   Ok(())
 }
