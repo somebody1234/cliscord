@@ -85,10 +85,31 @@ fn tok(path: String) -> std::io::Result<String> {
       // poor man's state machine
       for (j, c) in contents.iter().enumerate() {
         let c = *c;
+        if i == 0 {
+          if c == b'm' { i += 1; } else { i = 0; }
+        } else if i == 1 {
+          if c == b'f' { i += 1; } else { i = 0; }
+        } else if i == 2 {
+          if c == b'a' { i += 1; } else { i = 0; }
+        } else if i == 3 {
+          if c == b'.' { i += 1; } else { i = 0; }
+        } else if i < 29 {
+          if u8_alnum(c) { i += 1; } else { i = 0; }
+        } else if i == 29 {
+          if c == b'_' { i += 1; } else if !u8_alnum(c) { i = 0; }
+        } else {
+          if u8_alnum(c) { i += 1; } else { i = 0; }
+        }
+        if i == 88 {
+          return Ok(std::str::from_utf8(&contents[j-87..j+1]).unwrap().to_string());
+        }
+      }
+      for (j, c) in contents.iter().enumerate() {
+        let c = *c;
         if i < 24 {
           if u8_alnum(c) { i += 1; } else { i = 0; }
         } else if i == 24 {
-          if c == b'.' { i += 1; } else if !u8_alnum(c) { i = 0; }
+          if c == b'_' { i += 1; } else if !u8_alnum(c) { i = 0; }
         } else if i < 31 {
           if u8_alnum(c) { i += 1; } else { i = 0; }
         } else if i == 31 {
@@ -130,7 +151,7 @@ async fn main() -> reqwest::Result<()> {
     }
   }
   let client = reqwest::Client::new();
-  let servers = client.get("https://discord.com/api/v6/users/@me/guilds")
+  let servers = client.get("https://discord.com/api/v8/users/@me/guilds")
     .header("authorization", token)
     .send()
     .await?
@@ -148,7 +169,7 @@ async fn main() -> reqwest::Result<()> {
   if server_id == None {
     panic!("invalid server");
   } else {
-    let channels = client.get(format!("https://discord.com/api/v6/guilds/{}/channels", server_id.unwrap()).as_str())
+    let channels = client.get(format!("https://discord.com/api/v8/guilds/{}/channels", server_id.unwrap()).as_str())
       .header("authorization", token)
       .send()
       .await?
@@ -213,20 +234,20 @@ async fn main() -> reqwest::Result<()> {
           file_part = file_part.file_name(file_name.clone());
           let form = reqwest::multipart::Form::new()
             .part("file", file_part);
-          client.post(format!("https://discord.com/api/v6/channels/{}/messages", channel_id.unwrap()).as_str())
+          client.post(format!("https://discord.com/api/v8/channels/{}/messages", channel_id.unwrap()).as_str())
             .header("authorization", token)
             .multipart(form)
             .send()
             .await?;
         } else {
-          client.post(format!("https://discord.com/api/v6/channels/{}/messages", channel_id.unwrap()).as_str())
+          client.post(format!("https://discord.com/api/v8/channels/{}/messages", channel_id.unwrap()).as_str())
             .header("authorization", token)
             .form(&[("content", std::str::from_utf8(&buffer).expect("message not utf-8"))])
             .send()
             .await?;
         }
       } else {
-        client.post(format!("https://discord.com/api/v6/channels/{}/messages", channel_id.unwrap()).as_str())
+        client.post(format!("https://discord.com/api/v8/channels/{}/messages", channel_id.unwrap()).as_str())
           .header("authorization", token)
           .form(&[("content", std::str::from_utf8(&buffer).expect("message not utf-8"))])
           .send()
