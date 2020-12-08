@@ -14,6 +14,27 @@ struct Channel {
   name: Option<String>,
 }
 
+#[derive(Deserialize)]
+struct User {
+  id: String,
+  username: String,
+  discriminator: String,
+}
+
+#[derive(Deserialize)]
+struct Member {
+  nick: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct Message {
+  id: String,
+  channel_id: String,
+  guild_id: Option<String>,
+  author: User,
+  content: String,
+}
+
 #[derive(Clap)]
 struct Opts {
   #[clap(short, long)]
@@ -26,6 +47,10 @@ struct Opts {
   token: Option<String>,
   #[clap(short, long)]
   block: bool,
+  #[clap(short, long)]
+  input: bool,
+  #[clap(short, long)]
+  format: Option<String>,
   path: Option<String>,
 }
 
@@ -141,13 +166,17 @@ async fn main() -> reqwest::Result<()> {
   let token = token_string.as_str();
   let mut server_name: Option<String> = opts.server.map(|s| s.to_lowercase());
   let mut channel_name: Option<String> = opts.channel.map(|s| s.to_lowercase());
+  let mut message_format: Option<String> = opts.format;
   if let Ok(contents) = std::fs::read_to_string(dirs::config_dir().expect("config dir unknown").join("cliscord/config").to_string_lossy().to_string()) {
     let parts: Vec<&str> = contents.split('\n').collect();
     if parts[0].len() > 0 {
       server_name = server_name.or(Some(parts[0].to_string().to_lowercase()));
     }
-    if parts.len() > 0 && parts[1].len() > 0 {
+    if parts.len() > 1 && parts[1].len() > 0 {
       channel_name = channel_name.or(Some(parts[1].to_string().to_lowercase()));
+    }
+    if parts.len() > 2 && parts[2].len() > 0 {
+      message_format = message_format.or(Some(parts[2].to_string()));
     }
   }
   let client = reqwest::Client::new();
@@ -159,6 +188,10 @@ async fn main() -> reqwest::Result<()> {
     .await?;
   let server_name = server_name.expect("missing server name");
   let channel_name = channel_name.expect("missing channel name");
+  let message_format = message_format.unwrap_or("%n: %m".into());
+  if let Ok(_) = std::fs::create_dir_all(dirs::config_dir().expect("config dir unknown").join("cliscord").to_string_lossy().to_string()) {
+    if let Ok(_) = std::fs::write(dirs::config_dir().expect("config dir unknown").join("cliscord/config").to_string_lossy().to_string(), format!("{}\n{}\n{}", server_name, channel_name, message_format)) {}
+  }
   let mut server_id: Option<String> = None;
   let mut channel_id: Option<String> = None;
   for server in servers {
@@ -168,24 +201,25 @@ async fn main() -> reqwest::Result<()> {
   }
   if server_id == None {
     panic!("invalid server");
-  } else {
-    let channels = client.get(format!("https://discord.com/api/v8/guilds/{}/channels", server_id.unwrap()).as_str())
-      .header("authorization", token)
-      .send()
-      .await?
-      .json::<std::vec::Vec<Channel>>()
-      .await?;
-    for channel in channels {
-      if let Some(name) = channel.name {
-        if name.to_lowercase() == channel_name {
-          channel_id = Some(channel.id);
-        }
+  }
+  let server_id = server_id.unwrap();
+  let channels = client.get(format!("https://discord.com/api/v8/guilds/{}/channels", server_id).as_str())
+    .header("authorization", token)
+    .send()
+    .await?
+    .json::<std::vec::Vec<Channel>>()
+    .await?;
+  for channel in channels {
+    if let Some(name) = channel.name {
+      if name.to_lowercase() == channel_name {
+        channel_id = Some(channel.id);
       }
     }
   }
   if channel_id == None {
     panic!("invalid channel");
   } else {
+    let channel_id = channel_id.unwrap();
     let mut buffer = Vec::new();
     if let Some(path) = &opts.path {
       if let Ok(vec) = std::fs::read(path) {
@@ -196,6 +230,7 @@ async fn main() -> reqwest::Result<()> {
     } else if let Ok(_) = std::io::stdin().read_to_end(&mut buffer) {
     }
     if buffer.len() > 0 {
+      let message_id: Option<String>;
       if cfg!(feature = "filetype") {
         let type_ = infer(&buffer);
         let is_text = type_.matcher_type() == infer::MatcherType::TEXT || (type_.matcher_type() == infer::MatcherType::APP && type_.mime_type() == "application/javascript");
@@ -234,29 +269,96 @@ async fn main() -> reqwest::Result<()> {
           file_part = file_part.file_name(file_name.clone());
           let form = reqwest::multipart::Form::new()
             .part("file", file_part);
-          client.post(format!("https://discord.com/api/v8/channels/{}/messages", channel_id.unwrap()).as_str())
+          message_id = Some(client.post(format!("https://discord.com/api/v8/channels/{}/messages", channel_id).as_str())
             .header("authorization", token)
             .multipart(form)
             .send()
-            .await?;
+            .await?
+            .json::<Message>()
+            .await?
+            .id);
         } else {
-          client.post(format!("https://discord.com/api/v8/channels/{}/messages", channel_id.unwrap()).as_str())
+          message_id = Some(client.post(format!("https://discord.com/api/v8/channels/{}/messages", channel_id).as_str())
             .header("authorization", token)
             .form(&[("content", std::str::from_utf8(&buffer).expect("message not utf-8"))])
             .send()
-            .await?;
+            .await?
+            .json::<Message>()
+            .await?
+            .id);
         }
       } else {
-        client.post(format!("https://discord.com/api/v8/channels/{}/messages", channel_id.unwrap()).as_str())
+        message_id = Some(client.post(format!("https://discord.com/api/v8/channels/{}/messages", channel_id).as_str())
           .header("authorization", token)
           .form(&[("content", std::str::from_utf8(&buffer).expect("message not utf-8"))])
           .send()
-          .await?;
+          .await?
+          .json::<Message>()
+          .await?
+          .id);
+      }
+      if opts.input {
+        let message_id = message_id.unwrap();
+        let mut message: Option<Message> = None;
+        let start = std::time::Instant::now();
+        while let None = message {
+          let mut messages = client.get(format!("https://discord.com/api/v8/channels/{}/messages?after={}&limit=1", channel_id, message_id).as_str())
+            .header("authorization", token)
+            .send()
+            .await?
+            .json::<std::vec::Vec<Message>>()
+            .await?;
+          if messages.len() > 0 {
+            message = Some(messages.remove(0));
+          } else {
+            let elapsed = start.elapsed().as_secs();
+            let mut duration = 1u8;
+            if elapsed > 900 { duration = 60; }
+            else if elapsed > 180 { duration = 15; }
+            else if elapsed > 15 { duration = 5; }
+            std::thread::sleep(std::time::Duration::from_secs(duration as u64));
+          }
+        }
+        let message = message.expect("logic error");
+        let mut output = String::new();
+        let mut percent = false;
+        let user = message.author.username.clone();
+        let guild_id = message.guild_id.unwrap_or(server_id);
+        let nick = client.get(format!("https://discord.com/api/v8/guilds/{}/members/{}", guild_id, message.author.id).as_str())
+          .header("authorization", token)
+          .send()
+          .await?
+          .json::<Member>()
+          .await?
+          .nick
+          .unwrap_or(user.clone());
+        for c in message_format.chars() {
+          if c == '%' {
+            percent = true;
+          } else if percent {
+            match c {
+              '%' => output.push('%'),
+              'm' => output += &message.content,
+              'M' => output += &message.id,
+              'u' => output += &user,
+              'U' => output += &message.author.id,
+              'd' => output += &message.author.discriminator,
+              'n' => output += &nick,
+              // NOTE: assume channel & server are same as in request
+              'c' => output += &channel_name,
+              'C' => output += &message.channel_id,
+              's' => output += &server_name,
+              'S' => output += &guild_id,
+              _ => { output.push('%'); output.push(c); }
+            }
+            percent = false;
+          } else {
+            output.push(c);
+          }
+        }
+        println!("{}", output);
       }
     }
-  }
-  if let Ok(_) = std::fs::create_dir_all(dirs::config_dir().expect("config dir unknown").join("cliscord").to_string_lossy().to_string()) {
-    if let Ok(_) = std::fs::write(dirs::config_dir().expect("config dir unknown").join("cliscord/config").to_string_lossy().to_string(), format!("{}\n{}", server_name, channel_name)) {}
   }
   Ok(())
 }
