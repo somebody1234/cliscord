@@ -1,18 +1,18 @@
 [package]
 name = "cliscord"
-version = "0.0.1"
+version = "0.0.2"
 description = "cli tool to send (and receive) single discord messages"
 license = "MIT"
 authors = ["somebody1234 <ehern.lee@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-serde = { version = "1.0.115", features = ["derive"] }
-reqwest = { version = "0.10", features = ["json"] }
-tokio = { version = "0.2", features = ["macros"] }
-clap = "3.0.0-beta.1"
-dirs = { version = "3.0.1" }
-infer = { version = "0.3.2", optional = true }
+serde = { version = "1", features = ["derive"] }
+reqwest = { version = "0.11", features = ["json", "multipart"] }
+tokio = { version = "1", features = ["macros"] }
+clap = { version = "4", features = ["derive"] }
+dirs = "4"
+infer = { version = "0.9", optional = true }
 
 [features]
 default = ["filetype", "token"]

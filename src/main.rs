@@ -1,4 +1,4 @@
-use clap::Clap;
+use clap::Parser;
 use serde::Deserialize;
 use std::io::Read;
 
@@ -35,22 +35,24 @@ struct Message {
   content: String,
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 struct Opts {
-  #[clap(short, long)]
+  #[arg(short, long)]
   server: Option<String>,
-  #[clap(short, long)]
+  #[arg(short, long)]
   channel: Option<String>,
-  #[clap(short, long)]
+  #[arg(short, long)]
   message: Option<String>,
-  #[clap(short, long)]
+  #[arg(short, long)]
   token: Option<String>,
-  #[clap(short, long)]
+  #[arg(short, long)]
   block: bool,
-  #[clap(short, long)]
+  #[arg(short, long)]
   input: bool,
-  #[clap(short, long)]
+  #[arg(short, long)]
   format: Option<String>,
+  #[arg(short, long)]
+  version: bool,
   path: Option<String>,
 }
 
@@ -72,25 +74,25 @@ fn infer(buf: &[u8]) -> infer::Type {
       &buf[b"#!/bin/".len()..]
     };
     match std::str::from_utf8(&lang).expect("shebang not in utf-8").to_lowercase().as_str() {
-      "node" | "deno" | "spidermonkey" | "v8" => infer::Type::new(infer::MatcherType::APP, "application/javascript", "js", false_matcher),
-      "ts-node" => infer::Type::new(infer::MatcherType::TEXT, "text/plain", "ts", false_matcher),
+      "node" | "deno" | "spidermonkey" | "v8" => infer::Type::new(infer::MatcherType::App, "application/javascript", "js", false_matcher),
+      "ts-node" => infer::Type::new(infer::MatcherType::Text, "text/plain", "ts", false_matcher),
       // NOTE: i could include some minor versions; however i doubt they're used often enough, esp. in shebang lines.
-      "python" | "python2" | "python3" | "pypy" | "pypy2" | "pypy3" => infer::Type::new(infer::MatcherType::TEXT, "text/plain", "py", false_matcher),
-      "ruby" | "irb" => infer::Type::new(infer::MatcherType::TEXT, "text/plain", "rb", false_matcher),
-      "kotlinc" => infer::Type::new(infer::MatcherType::TEXT, "text/plain", "kt", false_matcher),
-      "php" => infer::Type::new(infer::MatcherType::TEXT, "text/plain", "php", false_matcher),
-      "perl" => infer::Type::new(infer::MatcherType::TEXT, "text/plain", "perl", false_matcher),
-      "raku" | "perl6" => infer::Type::new(infer::MatcherType::TEXT, "text/plain", "perl", false_matcher),
-      "lua" => infer::Type::new(infer::MatcherType::TEXT, "text/plain", "lua", false_matcher),
+      "python" | "python2" | "python3" | "pypy" | "pypy2" | "pypy3" => infer::Type::new(infer::MatcherType::Text, "text/plain", "py", false_matcher),
+      "ruby" | "irb" => infer::Type::new(infer::MatcherType::Text, "text/plain", "rb", false_matcher),
+      "kotlinc" => infer::Type::new(infer::MatcherType::Text, "text/plain", "kt", false_matcher),
+      "php" => infer::Type::new(infer::MatcherType::Text, "text/plain", "php", false_matcher),
+      "perl" => infer::Type::new(infer::MatcherType::Text, "text/plain", "perl", false_matcher),
+      "raku" | "perl6" => infer::Type::new(infer::MatcherType::Text, "text/plain", "perl", false_matcher),
+      "lua" => infer::Type::new(infer::MatcherType::Text, "text/plain", "lua", false_matcher),
 
-      "sh" => infer::Type::new(infer::MatcherType::TEXT, "text/plain", "sh", false_matcher),
-      "bash" => infer::Type::new(infer::MatcherType::TEXT, "text/plain", "bash", false_matcher),
-      "zsh" => infer::Type::new(infer::MatcherType::TEXT, "text/plain", "zsh", false_matcher),
-      "fish" => infer::Type::new(infer::MatcherType::TEXT, "text/plain", "fish", false_matcher),
-      _ => infer::Type::new(infer::MatcherType::TEXT, "text/plain", "txt", false_matcher)
+      "sh" => infer::Type::new(infer::MatcherType::Text, "text/plain", "sh", false_matcher),
+      "bash" => infer::Type::new(infer::MatcherType::Text, "text/plain", "bash", false_matcher),
+      "zsh" => infer::Type::new(infer::MatcherType::Text, "text/plain", "zsh", false_matcher),
+      "fish" => infer::Type::new(infer::MatcherType::Text, "text/plain", "fish", false_matcher),
+      _ => infer::Type::new(infer::MatcherType::Text, "text/plain", "txt", false_matcher)
     }
   } else {
-    infer::Type::new(infer::MatcherType::TEXT, "text/plain", "txt", false_matcher)
+    infer::Type::new(infer::MatcherType::Text, "text/plain", "txt", false_matcher)
   }
 }
 
@@ -120,10 +122,6 @@ fn tok(path: String) -> std::io::Result<String> {
           if c == b'.' { i += 1; } else { i = 0; }
         } else if i < 29 {
           if u8_alnum(c) { i += 1; } else { i = 0; }
-        } else if i == 29 {
-          if c == b'_' { i += 1; } else if !u8_alnum(c) { i = 0; }
-        } else {
-          if u8_alnum(c) { i += 1; } else { i = 0; }
         }
         if i == 88 {
           return Ok(std::str::from_utf8(&contents[j-87..j+1]).unwrap().to_string());
@@ -134,7 +132,7 @@ fn tok(path: String) -> std::io::Result<String> {
         if i < 24 {
           if u8_alnum(c) { i += 1; } else { i = 0; }
         } else if i == 24 {
-          if c == b'_' { i += 1; } else if !u8_alnum(c) { i = 0; }
+          if c == b'.' { i += 1; } else if !u8_alnum(c) { i = 0; }
         } else if i < 31 {
           if u8_alnum(c) { i += 1; } else { i = 0; }
         } else if i == 31 {
@@ -142,8 +140,8 @@ fn tok(path: String) -> std::io::Result<String> {
         } else {
           if u8_alnum(c) { i += 1; } else { i = 0; }
         }
-        if i == 59 {
-          return Ok(std::str::from_utf8(&contents[j-58..j+1]).unwrap().to_string());
+        if i == 70 {
+          return Ok(std::str::from_utf8(&contents[j-69..j+1]).unwrap().to_string());
         }
       }
     }
@@ -151,9 +149,13 @@ fn tok(path: String) -> std::io::Result<String> {
   Err(std::io::Error::new(std::io::ErrorKind::Other, "token not found"))
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> reqwest::Result<()> {
   let opts = Opts::parse();
+  if opts.version {
+    println!("cliscord 0.0.2");
+    return Ok(())
+  }
   let token_string = if cfg!(feature = "token") {
     opts.token.ok_or_else(|| std::env::var("DISCORD_TOKEN"))
       .or_else(|_| tok(dirs::config_dir().expect("config dir unknown").join("discord/Local Storage/leveldb").to_string_lossy().to_string()))
@@ -233,7 +235,7 @@ async fn main() -> reqwest::Result<()> {
       let message_id: Option<String>;
       if cfg!(feature = "filetype") {
         let type_ = infer(&buffer);
-        let is_text = type_.matcher_type() == infer::MatcherType::TEXT || (type_.matcher_type() == infer::MatcherType::APP && type_.mime_type() == "application/javascript");
+        let is_text = type_.matcher_type() == infer::MatcherType::Text || (type_.matcher_type() == infer::MatcherType::App && type_.mime_type() == "application/javascript");
         let mut send_file = false;
         if opts.block {
           if buffer.len() + 8 + type_.extension().len() > 2000 {
@@ -269,7 +271,7 @@ async fn main() -> reqwest::Result<()> {
           file_part = file_part.file_name(file_name.clone());
           let form = reqwest::multipart::Form::new()
             .part("file", file_part);
-          message_id = Some(client.post(format!("https://discord.com/api/v8/channels/{}/messages", channel_id).as_str())
+          message_id = Some(client.post(format!("https://discord.com/api/v10/channels/{}/messages", channel_id).as_str())
             .header("authorization", token)
             .multipart(form)
             .send()
@@ -278,7 +280,7 @@ async fn main() -> reqwest::Result<()> {
             .await?
             .id);
         } else {
-          message_id = Some(client.post(format!("https://discord.com/api/v8/channels/{}/messages", channel_id).as_str())
+          message_id = Some(client.post(format!("https://discord.com/api/v10/channels/{}/messages", channel_id).as_str())
             .header("authorization", token)
             .form(&[("content", std::str::from_utf8(&buffer).expect("message not utf-8"))])
             .send()
@@ -288,7 +290,7 @@ async fn main() -> reqwest::Result<()> {
             .id);
         }
       } else {
-        message_id = Some(client.post(format!("https://discord.com/api/v8/channels/{}/messages", channel_id).as_str())
+        message_id = Some(client.post(format!("https://discord.com/api/v10/channels/{}/messages", channel_id).as_str())
           .header("authorization", token)
           .form(&[("content", std::str::from_utf8(&buffer).expect("message not utf-8"))])
           .send()
@@ -302,7 +304,7 @@ async fn main() -> reqwest::Result<()> {
         let mut message: Option<Message> = None;
         let start = std::time::Instant::now();
         while let None = message {
-          let mut messages = client.get(format!("https://discord.com/api/v8/channels/{}/messages?after={}&limit=1", channel_id, message_id).as_str())
+          let mut messages = client.get(format!("https://discord.com/api/v10/channels/{}/messages?after={}&limit=1", channel_id, message_id).as_str())
             .header("authorization", token)
             .send()
             .await?
@@ -324,7 +326,7 @@ async fn main() -> reqwest::Result<()> {
         let mut percent = false;
         let user = message.author.username.clone();
         let guild_id = message.guild_id.unwrap_or(server_id);
-        let nick = client.get(format!("https://discord.com/api/v8/guilds/{}/members/{}", guild_id, message.author.id).as_str())
+        let nick = client.get(format!("https://discord.com/api/v10/guilds/{}/members/{}", guild_id, message.author.id).as_str())
           .header("authorization", token)
           .send()
           .await?
