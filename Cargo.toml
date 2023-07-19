@@ -1,6 +1,6 @@
 [package]
 name = "cliscord"
-version = "0.0.2"
+version = "0.0.3"
 description = "cli tool to send (and receive) single discord messages"
 license = "MIT"
 authors = ["somebody1234 <ehern.lee@gmail.com>"]

@@ -50,6 +50,8 @@ struct Opts {
   #[arg(short, long)]
   input: bool,
   #[arg(short, long)]
+  nitro: bool,
+  #[arg(short, long)]
   format: Option<String>,
   #[arg(short, long)]
   version: bool,
@@ -129,18 +131,18 @@ fn tok(path: String) -> std::io::Result<String> {
       }
       for (j, c) in contents.iter().enumerate() {
         let c = *c;
-        if i < 24 {
+        if i < 26 {
           if u8_alnum(c) { i += 1; } else { i = 0; }
-        } else if i == 24 {
+        } else if i == 26 {
           if c == b'.' { i += 1; } else if !u8_alnum(c) { i = 0; }
-        } else if i < 31 {
+        } else if i < 33 {
           if u8_alnum(c) { i += 1; } else { i = 0; }
-        } else if i == 31 {
+        } else if i == 33 {
           if c == b'.' { i += 1; } else { i = 0; }
         } else {
           if u8_alnum(c) { i += 1; } else { i = 0; }
         }
-        if i == 70 {
+        if i == 72 {
           return Ok(std::str::from_utf8(&contents[j-69..j+1]).unwrap().to_string());
         }
       }
@@ -157,12 +159,12 @@ async fn main() -> reqwest::Result<()> {
     return Ok(())
   }
   let token_string = if cfg!(feature = "token") {
-    opts.token.ok_or_else(|| std::env::var("DISCORD_TOKEN"))
-      .or_else(|_| tok(dirs::config_dir().expect("config dir unknown").join("discord/Local Storage/leveldb").to_string_lossy().to_string()))
-      .or_else(|_| tok(dirs::config_dir().expect("config dir unknown").join("google-chrome/Default/Local Storage/leveldb/").to_string_lossy().to_string()))
+    opts.token.or_else(|| std::env::var("DISCORD_TOKEN").ok())
+      .or_else(|| tok(dirs::config_dir().expect("config dir unknown").join("discord/Local Storage/leveldb").to_string_lossy().to_string()).ok())
+      .or_else(|| tok(dirs::config_dir().expect("config dir unknown").join("google-chrome/Default/Local Storage/leveldb/").to_string_lossy().to_string()).ok())
       .expect("discord token not found, set environment variable DISCORD_TOKEN, pass in as argument, or login to discord on desktop app or on chrome")
   } else {
-    opts.token.ok_or_else(|| std::env::var("DISCORD_TOKEN"))
+    opts.token.or_else(|| std::env::var("DISCORD_TOKEN").ok())
       .expect("discord token not found, set environment variable DISCORD_TOKEN or pass in as argument")
   };
   let token = token_string.as_str();
@@ -251,7 +253,7 @@ async fn main() -> reqwest::Result<()> {
               .to_string();
           }
           buffer = format!("```{}\n{}\n```", extension, std::str::from_utf8(&buffer).expect("message not utf-8")).as_bytes().into();
-        } else if is_text && buffer.len() < 2000 {
+        } else if is_text && (buffer.len() <= 2000 || opts.nitro && buffer.len() <= 4000) {
           // text message
         } else {
           // file attachment; with appropriate embed if there is one
